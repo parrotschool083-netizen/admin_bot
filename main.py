@@ -106,7 +106,16 @@ async def receive_form(request: Request):
     )
 
     try:
+        # Шлемо головному адміну
         await bot.send_message(chat_id=ADMIN_CHAT_ID, text=text)
+        # Шлемо всім адмінам з БД
+        async with db.pool.acquire() as conn:
+            admins = await conn.fetch("SELECT id FROM users WHERE is_admin=TRUE AND id!=$1", ADMIN_CHAT_ID)
+        for admin in admins:
+            try:
+                await bot.send_message(chat_id=admin['id'], text=text)
+            except Exception:
+                pass
         return {"ok": True}
     except Exception as e:
         logger.error(f"Error: {e}")
