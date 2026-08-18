@@ -40,7 +40,6 @@ async def lifespan(app: FastAPI):
     logger.info(f"Webhook set: https://{webhook_url}/telegram-webhook")
     logger.info("Bot started")
     yield
-    await bot.delete_webhook()
     await bot.session.close()
     await db.close_db()
     logger.info("Bot stopped")
