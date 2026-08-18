@@ -5,32 +5,38 @@ from fastapi.middleware.cors import CORSMiddleware
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.fsm.storage.redis import RedisStorage
 from contextlib import asynccontextmanager
 import uvicorn
+import db
+from handlers import client, admin
 
-# Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Config from env
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 ADMIN_CHAT_ID = int(os.environ["ADMIN_CHAT_ID"])
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "parrot2026")
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 
-# Bot & Dispatcher
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dp = Dispatcher()
+storage = RedisStorage.from_url(REDIS_URL)
+dp = Dispatcher(storage=storage)
+dp.include_router(client.router)
+dp.include_router(admin.router)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    webhook_url = 'adminbot-production-dabe.up.railway.app'
-    await bot.set_webhook(f'https://{webhook_url}/telegram-webhook')
-    logger.info(f'Webhook set: https://{webhook_url}/telegram-webhook')
-    logger.info('Bot started')
+    await db.init_db()
+    webhook_url = "adminbot-production-dabe.up.railway.app"
+    await bot.set_webhook(f"https://{webhook_url}/telegram-webhook")
+    logger.info(f"Webhook set: https://{webhook_url}/telegram-webhook")
+    logger.info("Bot started")
     yield
     await bot.delete_webhook()
     await bot.session.close()
-    logger.info('Bot stopped')
+    await db.close_db()
+    logger.info("Bot stopped")
 
 app = FastAPI(lifespan=lifespan)
 
@@ -48,30 +54,32 @@ async def root():
 
 @app.post("/form")
 async def receive_form(request: Request):
-    """Endpoint що приймає заявки з сайту"""
     try:
         data = await request.json()
     except Exception:
         return {"ok": False, "error": "Invalid JSON"}
 
-    # Перевіряємо secret
     secret = data.get("secret", "")
     if secret != WEBHOOK_SECRET:
         return {"ok": False, "error": "Unauthorized"}
 
     name = data.get("name", "—")
     phone = data.get("phone", "—")
-    message = data.get("message", "—")
-    form_type = data.get("type", "Запис")
     child_age = data.get("child_age", "—")
+    form_type = data.get("type", "Запис")
+
+    async with db.pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO requests (name, phone, child_age, type)
+            VALUES ($1, $2, $3, $4)
+        """, name, phone, child_age, form_type)
 
     text = (
         f"🦜 <b>НОВА ЗАЯВКА — Parrot School</b>\n\n"
         f"📋 <b>Тип:</b> {form_type}\n"
         f"👤 <b>Ім'я:</b> {name}\n"
         f"📞 <b>Телефон:</b> {phone}\n"
-        f"👶 <b>Вік дитини:</b> {child_age}\n"
-        f"💬 <b>Повідомлення:</b> {message}\n\n"
+        f"👶 <b>Вік дитини:</b> {child_age}\n\n"
         f"⏰ Заявка надійшла щойно"
     )
 
@@ -79,48 +87,15 @@ async def receive_form(request: Request):
         await bot.send_message(chat_id=ADMIN_CHAT_ID, text=text)
         return {"ok": True}
     except Exception as e:
-        logger.error(f"Error sending message: {e}")
+        logger.error(f"Error: {e}")
         return {"ok": False, "error": str(e)}
 
 @app.post("/telegram-webhook")
 async def telegram_webhook(request: Request):
-    """Webhook від Telegram"""
     data = await request.json()
     update = types.Update(**data)
     await dp.feed_update(bot=bot, update=update)
     return {"ok": True}
-
-# Telegram команди
-@dp.message(lambda m: m.text == "/start")
-async def cmd_start(message: types.Message):
-    if message.chat.id != ADMIN_CHAT_ID:
-        return
-    await message.answer(
-        "🦜 <b>Parrot School Admin Bot</b>\n\n"
-        "Я буду надсилати тобі заявки з сайту.\n\n"
-        "/status — статус бота\n"
-        "/test — тестова заявка"
-    )
-
-@dp.message(lambda m: m.text == "/status")
-async def cmd_status(message: types.Message):
-    if message.chat.id != ADMIN_CHAT_ID:
-        return
-    await message.answer("✅ Бот працює. Чекаю заявки з сайту.")
-
-@dp.message(lambda m: m.text == "/test")
-async def cmd_test(message: types.Message):
-    if message.chat.id != ADMIN_CHAT_ID:
-        return
-    await message.answer(
-        "🦜 <b>НОВА ЗАЯВКА — Parrot School</b>\n\n"
-        "📋 <b>Тип:</b> Тестова заявка\n"
-        "👤 <b>Ім'я:</b> Тест Тестович\n"
-        "📞 <b>Телефон:</b> +380991234567\n"
-        "👶 <b>Вік дитини:</b> 8 років\n"
-        "💬 <b>Повідомлення:</b> Хочу записати дитину\n\n"
-        "⏰ Тестова заявка"
-    )
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
