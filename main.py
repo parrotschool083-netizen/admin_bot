@@ -22,11 +22,11 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 storage = RedisStorage.from_url(REDIS_URL)
 dp = Dispatcher(storage=storage)
-dp.include_router(client.router)
-dp.include_router(admin.router)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    dp.include_router(client.router)
+    dp.include_router(admin.router)
     await db.init_db()
     webhook_url = "adminbot-production-dabe.up.railway.app"
     await bot.set_webhook(f"https://{webhook_url}/telegram-webhook")
