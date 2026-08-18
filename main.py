@@ -23,10 +23,9 @@ dp = Dispatcher()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    webhook_url = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '')
-    if webhook_url:
-        await bot.set_webhook(f'https://{webhook_url}/telegram-webhook')
-        logger.info(f'Webhook set: https://{webhook_url}/telegram-webhook')
+    webhook_url = 'adminbot-production-dabe.up.railway.app'
+    await bot.set_webhook(f'https://{webhook_url}/telegram-webhook')
+    logger.info(f'Webhook set: https://{webhook_url}/telegram-webhook')
     logger.info('Bot started')
     yield
     await bot.delete_webhook()
