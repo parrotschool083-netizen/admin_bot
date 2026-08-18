@@ -89,12 +89,14 @@ async def receive_form(request: Request):
         pass
 
     text = (
-        "<b>НОВА ЗАЯВКА - Parrot School</b>\n\n"
-        f"Тип: {form_type}\n"
-        f"Імя: {name}\n"
-        f"Телефон: {phone}\n"
-        f"Вік дитини: {child_age}\n\n"
-        "Заявка надійшла щойно"
+        "\U0001f99c <b>НОВА ЗАЯВКА</b> \U0001f99c\n"
+        "\u2500" * 28 + "\n\n"
+        f"\U0001f4cb <b>Тип:</b>  {form_type}\n"
+        f"\U0001f464 <b>Ім\u2019я:</b>  {name}\n"
+        f"\U0001f4de <b>Телефон:</b>  <code>{phone}</code>\n"
+        f"\U0001f476 <b>Вік дитини:</b>  {child_age}\n\n"
+        "\u2500" * 28 + "\n"
+        "\u23f0 <i>Передзвоніть якнайшвидше!</i>"
     )
 
     try:
