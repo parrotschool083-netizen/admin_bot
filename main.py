@@ -59,6 +59,21 @@ app.add_middleware(
 async def root():
     return {"status": "Parrot School Admin Bot is running"}
 
+@app.get("/set-webhook")
+async def set_webhook():
+    webhook_url = "adminbot-production-dabe.up.railway.app"
+    await bot.set_webhook(
+        url=f"https://{webhook_url}/telegram-webhook",
+        drop_pending_updates=False
+    )
+    info = await bot.get_webhook_info()
+    return {"ok": True, "url": info.url}
+
+@app.get("/webhook-info")
+async def webhook_info():
+    info = await bot.get_webhook_info()
+    return {"url": info.url, "pending": info.pending_update_count}
+
 @app.post("/form")
 async def receive_form(request: Request):
     try:
