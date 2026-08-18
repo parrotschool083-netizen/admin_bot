@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from aiogram import Bot, Dispatcher, types
@@ -23,23 +24,27 @@ bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTM
 storage = RedisStorage.from_url(REDIS_URL)
 dp = Dispatcher(storage=storage)
 
+async def run_polling():
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     dp.include_router(client.router)
     dp.include_router(admin.router)
     await db.init_db()
     await bot.set_my_commands([
-        types.BotCommand(command="start", description="🦜 Головне меню"),
-        types.BotCommand(command="admin", description="👑 Адмін панель"),
+        types.BotCommand(command="start", description="Головне меню"),
+        types.BotCommand(command="admin", description="Адмін панель"),
     ])
-    webhook_url = "adminbot-production-dabe.up.railway.app"
-    await bot.set_webhook(
-        url=f"https://{webhook_url}/telegram-webhook",
-        drop_pending_updates=True
-    )
-    logger.info(f"Webhook set: https://{webhook_url}/telegram-webhook")
-    logger.info("Bot started")
+    polling_task = asyncio.create_task(run_polling())
+    logger.info("Bot started polling")
     yield
+    polling_task.cancel()
+    try:
+        await polling_task
+    except asyncio.CancelledError:
+        pass
     await bot.session.close()
     await db.close_db()
     logger.info("Bot stopped")
@@ -49,29 +54,14 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["POST", "GET", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
 )
 
 @app.get("/")
 async def root():
     return {"status": "Parrot School Admin Bot is running"}
-
-@app.get("/set-webhook")
-async def set_webhook():
-    webhook_url = "adminbot-production-dabe.up.railway.app"
-    await bot.set_webhook(
-        url=f"https://{webhook_url}/telegram-webhook",
-        drop_pending_updates=False
-    )
-    info = await bot.get_webhook_info()
-    return {"ok": True, "url": info.url}
-
-@app.get("/webhook-info")
-async def webhook_info():
-    info = await bot.get_webhook_info()
-    return {"url": info.url, "pending": info.pending_update_count}
 
 @app.post("/form")
 async def receive_form(request: Request):
@@ -84,48 +74,42 @@ async def receive_form(request: Request):
     if secret != WEBHOOK_SECRET:
         return {"ok": False, "error": "Unauthorized"}
 
-    name = data.get("name", "—")
-    phone = data.get("phone", "—")
-    child_age = data.get("child_age", "—")
+    name = data.get("name", "-")
+    phone = data.get("phone", "-")
+    child_age = data.get("child_age", "-")
     form_type = data.get("type", "Запис")
 
-    async with db.pool.acquire() as conn:
-        await conn.execute("""
-            INSERT INTO requests (name, phone, child_age, type)
-            VALUES ($1, $2, $3, $4)
-        """, name, phone, child_age, form_type)
+    try:
+        async with db.pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO requests (name, phone, child_age, type)
+                VALUES ($1, $2, $3, $4)
+            """, name, phone, child_age, form_type)
+    except Exception:
+        pass
 
     text = (
-        f"🦜 <b>НОВА ЗАЯВКА — Parrot School</b>\n\n"
-        f"📋 <b>Тип:</b> {form_type}\n"
-        f"👤 <b>Ім'я:</b> {name}\n"
-        f"📞 <b>Телефон:</b> {phone}\n"
-        f"👶 <b>Вік дитини:</b> {child_age}\n\n"
-        f"⏰ Заявка надійшла щойно"
+        "<b>НОВА ЗАЯВКА - Parrot School</b>\n\n"
+        f"Тип: {form_type}\n"
+        f"Імя: {name}\n"
+        f"Телефон: {phone}\n"
+        f"Вік дитини: {child_age}\n\n"
+        "Заявка надійшла щойно"
     )
 
     try:
-        # Шлемо головному адміну
         await bot.send_message(chat_id=ADMIN_CHAT_ID, text=text)
-        # Шлемо всім адмінам з БД
         async with db.pool.acquire() as conn:
             admins = await conn.fetch("SELECT id FROM users WHERE is_admin=TRUE AND id!=$1", ADMIN_CHAT_ID)
-        for admin in admins:
+        for a in admins:
             try:
-                await bot.send_message(chat_id=admin['id'], text=text)
+                await bot.send_message(chat_id=a["id"], text=text)
             except Exception:
                 pass
         return {"ok": True}
     except Exception as e:
         logger.error(f"Error: {e}")
         return {"ok": False, "error": str(e)}
-
-@app.post("/telegram-webhook")
-async def telegram_webhook(request: Request):
-    data = await request.json()
-    update = types.Update(**data)
-    await dp.feed_update(bot=bot, update=update)
-    return {"ok": True}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
