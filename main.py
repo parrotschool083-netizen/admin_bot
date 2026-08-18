@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 from contextlib import asynccontextmanager
 import uvicorn
 
@@ -17,7 +18,7 @@ ADMIN_CHAT_ID = int(os.environ["ADMIN_CHAT_ID"])
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "parrot2026")
 
 # Bot & Dispatcher
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 @asynccontextmanager
