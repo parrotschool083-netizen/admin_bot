@@ -33,12 +33,11 @@ async def lifespan(app: FastAPI):
         types.BotCommand(command="admin", description="👑 Адмін панель"),
     ])
     webhook_url = "adminbot-production-dabe.up.railway.app"
-    current = await bot.get_webhook_info()
-    if current.url != f"https://{webhook_url}/telegram-webhook":
-        await bot.set_webhook(f"https://{webhook_url}/telegram-webhook")
-        logger.info(f"Webhook set: https://{webhook_url}/telegram-webhook")
-    else:
-        logger.info(f"Webhook already set: {current.url}")
+    await bot.set_webhook(
+        url=f"https://{webhook_url}/telegram-webhook",
+        drop_pending_updates=True
+    )
+    logger.info(f"Webhook set: https://{webhook_url}/telegram-webhook")
     logger.info("Bot started")
     yield
     await bot.delete_webhook()
