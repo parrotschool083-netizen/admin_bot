@@ -71,9 +71,10 @@ async def admin_add_id(message: Message, state: FSMContext):
     try:
         new_id = int(message.text.strip())
         async with db.pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE users SET is_admin=TRUE WHERE id=$1", new_id
-            )
+            await conn.execute("""
+                INSERT INTO users (id, is_admin) VALUES ($1, TRUE)
+                ON CONFLICT (id) DO UPDATE SET is_admin=TRUE
+            """, new_id)
         await state.clear()
         await message.answer(f"✅ Адміна <code>{new_id}</code> додано!", reply_markup=admin_menu())
     except ValueError:
