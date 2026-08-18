@@ -28,6 +28,10 @@ async def lifespan(app: FastAPI):
     dp.include_router(client.router)
     dp.include_router(admin.router)
     await db.init_db()
+    await bot.set_my_commands([
+        types.BotCommand(command="start", description="🦜 Головне меню"),
+        types.BotCommand(command="admin", description="👑 Адмін панель"),
+    ])
     webhook_url = "adminbot-production-dabe.up.railway.app"
     await bot.set_webhook(f"https://{webhook_url}/telegram-webhook")
     logger.info(f"Webhook set: https://{webhook_url}/telegram-webhook")
