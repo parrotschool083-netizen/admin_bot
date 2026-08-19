@@ -115,15 +115,13 @@ async def receive_form(request: Request):
             async with aiohttp.ClientSession() as session:
                 payload = {
                     "pipeline_id": 1,
-                    "source_id": 1,
+                    "status_id": 1,
                     "buyer": {
                         "full_name": name,
-                        "phone": phone,
+                        "phones": [{"phone": phone}],
                     },
-                    "fields": [
-                        {"name": "Вік дитини", "value": child_age},
-                        {"name": "Тип заявки", "value": form_type},
-                    ]
+                    "name": f"{form_type} — {name}",
+                    "comment": f"Вік дитини: {child_age}\nТип: {form_type}",
                 }
                 async with session.post(
                     "https://openapi.keycrm.app/v1/leads",
