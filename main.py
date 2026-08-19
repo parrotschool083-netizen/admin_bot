@@ -83,11 +83,15 @@ async def receive_form(request: Request):
     child_age = data.get("child_age", "-")
     form_type = data.get("type", "Запис")
 
-    # Дедублікація через Redis — один і той самий запит не надсилаємо двічі
-    dedup_key = f"form:{hashlib.md5(f'{name}{phone}{child_age}{form_type}'.encode()).hexdigest()}"
-    already = await storage.redis.set(dedup_key, "1", ex=60, nx=True)
-    if not already:
-        return {"ok": True, "dedup": True}
+    # Дедублікація — перевіряємо чи є такий самий запит за останні 60 секунд
+    import hashlib as _hs
+    dedup_key = f"form:{_hs.md5(f'{name}{phone}{form_type}'.encode()).hexdigest()}"
+    try:
+        already = await storage.redis.set(dedup_key, "1", ex=60, nx=True)
+        if not already:
+            return {"ok": True, "dedup": True}
+    except Exception:
+        pass
 
     try:
         async with db.pool.acquire() as conn:
