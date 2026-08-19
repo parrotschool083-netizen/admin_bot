@@ -3,6 +3,7 @@ import logging
 import asyncio
 import hashlib
 import time
+import aiohttp
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from aiogram import Bot, Dispatcher, types
@@ -21,6 +22,7 @@ BOT_TOKEN = os.environ["BOT_TOKEN"]
 ADMIN_CHAT_ID = int(os.environ["ADMIN_CHAT_ID"])
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "parrot2026")
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
+KEYCRM_API_KEY = os.environ.get("KEYCRM_API_KEY", "")
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 storage = RedisStorage.from_url(REDIS_URL)
@@ -106,6 +108,35 @@ async def receive_form(request: Request):
         "\u2500" * 28 + "\n"
         "\u23f0 <i>Передзвоніть якнайшвидше!</i>"
     )
+
+    # Відправляємо в KeyCRM
+    if KEYCRM_API_KEY:
+        try:
+            async with aiohttp.ClientSession() as session:
+                payload = {
+                    "pipeline_id": 1,
+                    "source_id": 1,
+                    "buyer": {
+                        "full_name": name,
+                        "phone": phone,
+                    },
+                    "fields": [
+                        {"name": "Вік дитини", "value": child_age},
+                        {"name": "Тип заявки", "value": form_type},
+                    ]
+                }
+                async with session.post(
+                    "https://openapi.keycrm.app/v1/leads",
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {KEYCRM_API_KEY}",
+                        "Content-Type": "application/json"
+                    }
+                ) as resp:
+                    result = await resp.json()
+                    logger.info(f"KeyCRM lead created: {result}")
+        except Exception as e:
+            logger.error(f"KeyCRM error: {e}")
 
     try:
         await bot.send_message(chat_id=ADMIN_CHAT_ID, text=text)
