@@ -28,17 +28,6 @@ bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTM
 storage = RedisStorage.from_url(REDIS_URL)
 dp = Dispatcher(storage=storage)
 
-async def run_polling():
-    import fcntl, sys
-    try:
-        lock = open("/tmp/bot.lock", "w")
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except IOError:
-        logger.error("Another instance is already running. Exiting.")
-        sys.exit(1)
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     dp.include_router(client.router)
@@ -48,14 +37,13 @@ async def lifespan(app: FastAPI):
         types.BotCommand(command="start", description="Головне меню"),
         types.BotCommand(command="admin", description="Адмін панель"),
     ])
-    polling_task = asyncio.create_task(run_polling())
-    logger.info("Bot started polling")
+    await bot.set_webhook(
+        url="https://adminbot-production-dabe.up.railway.app/telegram-webhook",
+        drop_pending_updates=True,
+        secret_token=WEBHOOK_SECRET
+    )
+    logger.info("Webhook set")
     yield
-    polling_task.cancel()
-    try:
-        await polling_task
-    except asyncio.CancelledError:
-        pass
     await bot.session.close()
     await db.close_db()
     logger.info("Bot stopped")
@@ -163,6 +151,16 @@ async def receive_form(request: Request):
     except Exception as e:
         logger.error(f"Error: {e}")
         return {"ok": False, "error": str(e)}
+
+@app.post("/telegram-webhook")
+async def telegram_webhook(request: Request):
+    token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if token != WEBHOOK_SECRET:
+        return {"ok": False}
+    data = await request.json()
+    update = types.Update(**data)
+    await dp.feed_update(bot=bot, update=update)
+    return {"ok": True}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
