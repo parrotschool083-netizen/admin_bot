@@ -123,12 +123,12 @@ async def receive_form(request: Request):
                 payload = {
                     "pipeline_id": 1,
                     "status_id": 1,
-                    "buyer": {
+                    "name": f"{form_type} - {name}",
+                    "comment": f"Вік дитини: {child_age}",
+                    "contact": {
                         "full_name": name,
-                        "phones": [{"phone": phone}],
-                    },
-                    "name": f"{form_type} — {name}",
-                    "comment": f"Вік дитини: {child_age}\nТип: {form_type}",
+                        "phone": phone,
+                    }
                 }
                 async with session.post(
                     "https://openapi.keycrm.app/v1/leads",
