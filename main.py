@@ -29,8 +29,15 @@ storage = RedisStorage.from_url(REDIS_URL)
 dp = Dispatcher(storage=storage)
 
 async def run_polling():
+    import fcntl, sys
+    try:
+        lock = open("/tmp/bot.lock", "w")
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except IOError:
+        logger.error("Another instance is already running. Exiting.")
+        sys.exit(1)
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
