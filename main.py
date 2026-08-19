@@ -69,6 +69,9 @@ async def root():
 
 @app.post("/form")
 async def receive_form(request: Request):
+    import time as _time
+    _rid = f"{id(request)}-{_time.time()}"
+    logger.info(f"[FORM] request_id={_rid}")
     try:
         data = await request.json()
     except Exception:
