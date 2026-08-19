@@ -1,6 +1,8 @@
 import os
 import logging
 import asyncio
+import hashlib
+import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from aiogram import Bot, Dispatcher, types
@@ -78,6 +80,12 @@ async def receive_form(request: Request):
     phone = data.get("phone", "-")
     child_age = data.get("child_age", "-")
     form_type = data.get("type", "Запис")
+
+    # Дедублікація через Redis — один і той самий запит не надсилаємо двічі
+    dedup_key = f"form:{hashlib.md5(f'{name}{phone}{child_age}{form_type}'.encode()).hexdigest()}"
+    already = await storage.redis.set(dedup_key, "1", ex=60, nx=True)
+    if not already:
+        return {"ok": True, "dedup": True}
 
     try:
         async with db.pool.acquire() as conn:
