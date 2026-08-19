@@ -139,14 +139,22 @@ async def receive_form(request: Request):
             logger.error(f"KeyCRM error: {e}")
 
     try:
-        await bot.send_message(chat_id=ADMIN_CHAT_ID, text=text)
+        # Збираємо всіх адмінів без дублів
         async with db.pool.acquire() as conn:
-            admins = await conn.fetch("SELECT id FROM users WHERE is_admin=TRUE AND id!=$1", ADMIN_CHAT_ID)
-        for a in admins:
+            db_admins = await conn.fetch("SELECT id FROM users WHERE is_admin=TRUE")
+        
+        recipients = set([ADMIN_CHAT_ID])
+        for a in db_admins:
+            recipients.add(a["id"])
+        
+        logger.info(f"[NOTIFY] Sending to {len(recipients)} recipients: {recipients}")
+        
+        for chat_id in recipients:
             try:
-                await bot.send_message(chat_id=a["id"], text=text)
-            except Exception:
-                pass
+                await bot.send_message(chat_id=chat_id, text=text)
+            except Exception as e:
+                logger.error(f"Failed to send to {chat_id}: {e}")
+        
         return {"ok": True}
     except Exception as e:
         logger.error(f"Error: {e}")
